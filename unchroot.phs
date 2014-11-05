@@ -1,0 +1,146 @@
+<?php
+
+  function chroot_normalize_path($path, $trailing_slash = true) {
+    $slash     = '/';
+    $previous  = '..';
+    $empty     = '';
+    $current   = '.';
+    $backslash = '\\';
+
+    // preset $result
+    $result = false;
+
+    // prepare $path as array
+    $path = explode($slash, str_replace($backslash, $slash, $path));
+    if (0 < count($path)) {
+      // prepare $cwd as empty array
+      $cwd = array();
+      switch ($path[0]) {
+        case $empty:
+          array_push($cwd, $empty);
+          break;
+
+        case $current:
+          $cwd = explode($slash, str_replace($backslash, $slash, getcwd()));
+          break;
+
+        case $previous:
+          $cwd = explode($slash, str_replace($backslash, $slash, getcwd()));
+          array_pop($cwd);
+          break;
+
+        default:
+          $cwd = explode($slash, str_replace($backslash, $slash, getcwd()));
+          array_push($cwd, $path[0]);
+      }
+
+      // normalize $path
+      for ($index = 1; $index < count($path); $index++) {
+        switch ($path[$index]) {
+          case $empty:
+            break;
+
+          case $current:
+            break;
+
+          case $previous:
+            array_pop($cwd);
+            break;
+
+          default:
+            array_push($cwd, $path[$index]);
+        }
+      }
+
+      if ($trailing_slash) {
+        if ((1 < count($path)) && ($empty === $path[count($path)-1])) {
+          array_push($cwd, $empty);
+        }
+      }
+
+      $result = implode($slash, $cwd);
+    }
+
+    return $result;
+  }
+
+  function unroot_get_gid($group) {
+    $result = -1;
+
+    if (is_int($group)) {
+      $result = $group;
+    } else {
+      $temp = posix_getgrnam($group);
+      if (false !== $temp) {
+        $result = $temp["gid"];
+      }
+    }
+
+    return $result;
+  }
+
+  function unroot_get_uid($user) {
+    $result = -1;
+
+    if (is_int($user)) {
+      $result = $user;
+    } else {
+      $temp = posix_getpwnam($user);
+      if (false !== $temp) {
+        $result = $temp["uid"];
+      }
+    }
+
+    return $result;
+  }
+
+  function force_chroot($path) {
+    $result = false;
+
+    $path = chroot_normalize_path($path);
+    if ((false !== $path) && (is_dir($path))) {
+      $result = chroot($path);
+    }
+
+    if (false === $result) {
+      exit("force chroot failed: path=$path");
+    }
+
+    return $result;
+  }
+
+  function force_unroot($user, $group) {
+    $result = (0 < posix_getuid());
+
+    if (!$result) {
+      $groupid = unroot_get_gid($group);
+      $userid  = unroot_get_uid($user);
+
+      if ((0 < $groupid) && (0 < $userid)) {
+        $result = posix_setgid($groupid);
+        if ($result) {
+          $result = posix_setuid($userid);
+        }
+      }
+    }
+
+    if (!$result) {
+      exit("force unroot failed: user=$user group=$group");
+    }
+
+    return $result;
+  }
+
+  function force_chroot_unroot($path, $user, $group) {
+    $gid = unroot_get_gid($group);
+    $uid = unroot_get_uid($user);
+
+    $result = force_chroot($path);
+    if ($result) {
+      $result = force_unroot($uid, $gid);
+    }
+
+    return $result;
+  }
+
+?>
