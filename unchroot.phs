@@ -30,6 +30,9 @@
       $result = true;
     } else {
       if (is_string($timeout_or_lockfilepath)) {
+        // we may run endlessly
+        set_time_limit(0);
+
         // we're able to aquire a lock if the file does not exist
         $writeLockfile = (!is_file($timeout_or_lockfilepath));
 
