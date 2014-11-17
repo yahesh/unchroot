@@ -1,5 +1,69 @@
 <?php
 
+  function allow_concurrency($timeout_or_lockfilepath) {
+    $result = false;
+
+    if (is_int($timeout_or_lockfilepath)) {
+      set_time_limit(0);
+      $result = true;
+    } else {
+      if (is_string($timeout_or_lockfilepath)) {
+        if (is_file($timeout_or_lockfilepath)) {
+          $content = file_get_contents($timeout_or_lockfilepath);
+          if ((false !== $content) && (!empty($content))) {
+            if (posix_getpid() == $content) {
+              $result = unlink($timeout_or_lockfilepath);
+            }
+          }
+        }
+      }
+    }
+
+    return $result;
+  }
+
+  function disallow_concurrency($timeout_or_lockfilepath) {
+    $result = false;
+
+    if (is_int($timeout_or_lockfilepath) && (0 < $timeout_or_lockfilepath)) {
+      set_time_limit($timeout_or_lockfilepath);
+      $result = true;
+    } else {
+      if (is_string($timeout_or_lockfilepath)) {
+        // we're able to aquire a lock if the file does not exist
+        $writeLockfile = (!is_file($timeout_or_lockfilepath));
+
+        if (!$writeLockfile) {
+          $content = file_get_contents($timeout_or_lockfilepath);
+
+          // we're able to aquire a lock if the file is empty...
+          if ((false !== $content) && (!empty($content))) {
+            // ...and we're the owner of the lock file...
+            if (posix_getpid() == $content) {
+              $result        = true;
+              $writeLockfile = false;
+            } else {
+              // ...or the owner of the lock file does not exist anymore...
+              if (!file_exists("/proc/" . $content)) {
+                // ...and we're able to delete the orphaned lock file
+                $writeLockfile = unlink($timeout_or_lockfilepath);
+              }
+            }
+          } else {
+            // ...and we're able to delete the empty lock file
+            $writeLockfile = unlink($timeout_or_lockfilepath);
+          }
+        }
+
+        if ($writeLockfile) {
+          $result = (false !== file_put_contents($timeout_or_lockfilepath, posix_getpid()));
+        }
+      }
+    }
+
+    return $result;
+  }
+
   function chroot_normalize_path($path, $trailing_slash = true) {
     $slash     = '/';
     $previous  = '..';
