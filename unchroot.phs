@@ -67,6 +67,151 @@
     return $result;
   }
 
+  function expand_path($path, $placeholders) {
+    $slash     = '/';
+    $previous  = '..';
+    $phbefore  = '{$';
+    $phafter   = '}';
+    $multi     = '*';
+    $empty     = '';
+    $current   = '.';
+    $backslash = '\\';
+
+    $result = false;
+
+    // replace placeholders
+    if (is_array($placeholders) && (0 < count($placeholders))) {
+      foreach ($placeholders as $key => $value) {
+        $path = str_ireplace($phbefore . $key . $phafter, $value, $path);
+      }
+    }
+
+    // only do deeper analysis if it is necessary
+    if (false !== stripos($path, $multi)) {
+      // prepare $path as array
+      $path = explode($slash, str_replace($backslash, $slash, $path));
+      if (0 < count($path)) {
+        // prepare $cwd as empty array
+        $cwd = array();
+        switch ($path[0]) {
+          case $empty:
+            array_push($cwd, $slash);
+            break;
+
+          case $current:
+            array_push($cwd, $current . $slash);
+            break;
+
+          case $previous:
+            array_push($cwd, $previous . $slash);
+            break;
+
+          default:
+            array_push($cwd, $current . $slash);
+        }
+
+        // proceed depending on $cwd preparation
+        for ($index = count($cwd); $index < count($path); $index++) {
+          if (false !== stripos($path[$index], $multi)) {
+            // handle complex path chunk
+            $multipieces = explode($multi, $path[$index]);
+
+            // $paths will become the new $cwd
+            $paths = array();
+            foreach ($cwd as $key => $value) {
+              $cwdhandle = opendir($value);
+              if (false !== $cwdhandle) {
+                $cwdname = false;
+                do {
+                  $cwdname = readdir($cwdhandle);
+                  if (false !== $cwdname) {
+                    if (($current !== $cwdname) && ($previous !== $cwdname)) {
+                      $cwdmatches = true;
+
+                      // check if the current $cwdname matches
+                      // the given $multipieces structure
+                      $lastpos = 0;
+                      foreach ($multipieces as $mpkey => $mpvalue) {
+                        if (!empty($mpvalue)) {
+                          $newpos = strpos($cwdname, $mpvalue);
+                          if ((false !== $newpos) &&
+                              ($lastpos <= $newpos) &&
+                              ((0 < $mpkey) || (0 === $newpos)) &&
+                              ((count($multipieces)-1 > $mpkey) || (strlen($cwdname)-strlen($mpvalue) === $newpos))) {
+                            $lastpos = $newpos + strlen($mpvalue);
+                          } else {
+                            $cwdmatches = false;
+                            break;
+                          }
+                        }
+                      }
+
+                      if ($cwdmatches) {
+                        if (is_dir($value . $cwdname)) {
+                          array_push($paths, $value . $cwdname . $slash);
+                        } else {
+                          if (is_file($value . $cwdname)) {
+                            array_push($paths, $value . $cwdname);
+                          }
+                        }
+                      }
+                    }
+                  }
+                } while (false !== $cwdname);
+
+                closedir($cwdhandle);
+              }
+            }
+            $cwd = $paths;
+          } else {
+            // handle simple path chunk
+            foreach ($cwd as $key => $value) {
+              // only allow folders to path
+              if ($empty === $path[$index]) {
+                if (!is_dir($value)) {
+                  unset($cwd[$key]);
+                }
+              } else {
+                if (is_dir($value . $path[$index])) {
+                  $cwd[$key] = $value . $path[$index] . $slash;
+                } else {
+                  if (is_file($value . $path[$index])) {
+                    $cwd[$key] = $value . $path[$index];
+                  } else {
+                    unset($cwd[$key]);
+                  }
+                }
+              }
+            }
+
+            // reindex $cwd
+            $cwd = array_values($cwd);
+          }
+
+          // if there's no $cwd entry left then
+          // we can exit because there is no existing
+          // path left fitting to the template
+          if (0 >= count($cwd)) {
+            break;
+          }
+        }
+
+        if (0 < count($cwd)) {
+          if (1 === count($cwd)) {
+            $result = $cwd[0];
+          } else {
+            $result = $cwd;
+          }
+        }
+      }
+    } else {
+      // or else just return the placeholderless path
+      $result = $path;
+    }
+
+    return $result;
+  }
+
   function chroot_normalize_path($path, $trailing_slash = true) {
     $slash     = '/';
     $previous  = '..';
