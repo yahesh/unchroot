@@ -70,7 +70,7 @@
   function expand_path($path, $placeholders) {
     $slash     = '/';
     $previous  = '..';
-    $phbefore  = '{$';
+    $phbefore  = '{%';
     $phafter   = '}';
     $multi     = '*';
     $empty     = '';
