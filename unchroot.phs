@@ -108,6 +108,26 @@
     }
   }
 
+  function expand_path_list($path, $placeholders = null, $sftp = false) {
+    $temp = expand_path($path, $placeholders, $sftp);
+
+    if (is_string($temp)) {
+      return array($temp);
+    } else {
+      return $temp;
+    }
+  }
+
+  function expand_path_single($path, $placeholders = null, $sftp = false) {
+    $temp = expand_path($path, $placeholders, $sftp);
+
+    if (is_array($temp)) {
+      return $temp[0];
+    } else {
+      return $temp;
+    }
+  }
+
   function expand_path($path, $placeholders = null, $sftp = false) {
     $slash     = '/';
     $previous  = '..';
@@ -247,7 +267,6 @@
       }
     } else {
       // or else just return the placeholderless path
-      print($path . " " . $sftp . "\n");
       if (expand_path_file_exists($path, $sftp)) {
         $result = $path;
       }
