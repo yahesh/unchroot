@@ -177,8 +177,8 @@
             // handle complex path chunk
             $multipieces = explode($multi, $path[$index]);
 
-            // $paths will become the new $cwd
-            $paths = array();
+            // $newcwd will become the new $cwd
+            $newcwd = array();
             foreach ($cwd as $key => $value) {
               $cwdhandle = expand_path_opendir($value, $sftp);
               if (false !== $cwdhandle) {
@@ -209,10 +209,13 @@
 
                       if ($cwdmatches) {
                         if (expand_path_is_dir($value . $cwdname, $sftp)) {
-                          array_push($paths, $value . $cwdname . $slash);
+                          array_push($newcwd, $value . $cwdname . $slash);
                         } else {
-                          if (expand_path_is_file($value . $cwdname, $sftp)) {
-                            array_push($paths, $value . $cwdname);
+                          // only add files if we're at the last $path element
+                          if (count($path)-1 === $index) {
+                            if (expand_path_is_file($value . $cwdname, $sftp)) {
+                              array_push($newcwd, $value . $cwdname);
+                            }
                           }
                         }
                       }
@@ -223,30 +226,17 @@
                 closedir($cwdhandle);
               }
             }
-            $cwd = $paths;
+            $cwd = $newcwd;
           } else {
             // handle simple path chunk
             foreach ($cwd as $key => $value) {
-              // only allow folders to path
-              if ($empty === $path[$index]) {
-                if (!expand_path_is_dir($value, $sftp)) {
-                  unset($cwd[$key]);
-                }
+              // append slashes if we're not at the last $path element
+              if (count($path)-1 > $index) {
+                $cwd[$key] = $value . $path[$index] . $slash;
               } else {
-                if (expand_path_is_dir($value . $path[$index], $sftp)) {
-                  $cwd[$key] = $value . $path[$index] . $slash;
-                } else {
-                  if (expand_path_is_file($value . $path[$index], $sftp)) {
-                    $cwd[$key] = $value . $path[$index];
-                  } else {
-                    unset($cwd[$key]);
-                  }
-                }
+                $cwd[$key] = $value . $path[$index];
               }
             }
-
-            // reindex $cwd
-            $cwd = array_values($cwd);
           }
 
           // if there's no $cwd entry left then
@@ -267,9 +257,7 @@
       }
     } else {
       // or else just return the placeholderless path
-      if (expand_path_file_exists($path, $sftp)) {
-        $result = $path;
-      }
+      $result = $path;
     }
 
     return $result;
