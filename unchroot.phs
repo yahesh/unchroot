@@ -67,49 +67,9 @@
     return $result;
   }
 
-  // FIX FOR BUG IN PHP UP TO VERSION 5.6
-  function sftp_fix_root($path) {
-    if ("/" === $path) {
-      return "/./";
-    } else {
-      return $path;
-    }
-  }
-
-  function expand_path_is_dir($path, $sftp = false) {
-    if (false === $sftp) {
-      return is_dir($path);
-    } else {
-      return is_dir("ssh2.sftp://$sftp" . sftp_fix_root($path));
-    }
-  }
-
-  function expand_path_is_file($path, $sftp = false) {
-    if (false === $sftp) {
-      return is_file($path);
-    } else {
-      return is_file("ssh2.sftp://$sftp" . sftp_fix_root($path));
-    }
-  }
-
-  function expand_path_file_exists($path, $sftp = false) {
-    if (false === $sftp) {
-      return file_exists($path);
-    } else {
-      return file_exists("ssh2.sftp://$sftp" . sftp_fix_root($path));
-    }
-  }
-
-  function expand_path_opendir($path, $sftp = false) {
-    if (false === $sftp) {
-      return opendir($path);
-    } else {
-      return opendir("ssh2.sftp://$sftp" . sftp_fix_root($path));
-    }
-  }
-
-  function expand_path_list($path, $placeholders = null, $sftp = false) {
-    $temp = expand_path($path, $placeholders, $sftp);
+  // calls expand_path() and always returns the result as an array
+  function expand_path_list($path) {
+    $temp = expand_path($path);
 
     if (is_string($temp)) {
       return array($temp);
@@ -118,8 +78,9 @@
     }
   }
 
-  function expand_path_single($path, $placeholders = null, $sftp = false) {
-    $temp = expand_path($path, $placeholders, $sftp);
+  // calls expand_path() but only returns the first result
+  function expand_path_single($path) {
+    $temp = expand_path($path);
 
     if (is_array($temp)) {
       return $temp[0];
@@ -128,24 +89,16 @@
     }
   }
 
-  function expand_path($path, $placeholders = null, $sftp = false) {
+  // takes a path and tries to expand it wherever a * occurs
+  function expand_path($path) {
     $slash     = '/';
     $previous  = '..';
-    $phbefore  = '{%';
-    $phafter   = '}';
     $multi     = '*';
     $empty     = '';
     $current   = '.';
     $backslash = '\\';
 
     $result = false;
-
-    // replace placeholders
-    if (is_array($placeholders) && (0 < count($placeholders))) {
-      foreach ($placeholders as $key => $value) {
-        $path = str_ireplace($phbefore . $key . $phafter, $value, $path);
-      }
-    }
 
     // only do deeper analysis if it is necessary
     if (false !== stripos($path, $multi)) {
@@ -160,15 +113,15 @@
             break;
 
           case $current:
-            array_push($cwd, $current . $slash);
+            array_push($cwd, $current.$slash);
             break;
 
           case $previous:
-            array_push($cwd, $previous . $slash);
+            array_push($cwd, $previous.$slash);
             break;
 
           default:
-            array_push($cwd, $current . $slash);
+            array_push($cwd, $current.$slash);
         }
 
         // proceed depending on $cwd preparation
@@ -180,7 +133,7 @@
             // $newcwd will become the new $cwd
             $newcwd = array();
             foreach ($cwd as $key => $value) {
-              $cwdhandle = expand_path_opendir($value, $sftp);
+              $cwdhandle = opendir($value);
               if (false !== $cwdhandle) {
                 $cwdname = false;
                 do {
@@ -208,13 +161,13 @@
                       }
 
                       if ($cwdmatches) {
-                        if (expand_path_is_dir($value . $cwdname, $sftp)) {
-                          array_push($newcwd, $value . $cwdname . $slash);
+                        if (is_dir($value.$cwdname)) {
+                          array_push($newcwd, $value.$cwdname.$slash);
                         } else {
                           // only add files if we're at the last $path element
                           if (count($path)-1 === $index) {
-                            if (expand_path_is_file($value . $cwdname, $sftp)) {
-                              array_push($newcwd, $value . $cwdname);
+                            if (is_file($value.$cwdname)) {
+                              array_push($newcwd, $value.$cwdname);
                             }
                           }
                         }
@@ -232,9 +185,9 @@
             foreach ($cwd as $key => $value) {
               // append slashes if we're not at the last $path element
               if (count($path)-1 > $index) {
-                $cwd[$key] = $value . $path[$index] . $slash;
+                $cwd[$key] = $value.$path[$index].$slash;
               } else {
-                $cwd[$key] = $value . $path[$index];
+                $cwd[$key] = $value.$path[$index];
               }
             }
           }
@@ -256,8 +209,27 @@
         }
       }
     } else {
-      // or else just return the placeholderless path
+      // or else just return the path
       $result = $path;
+    }
+
+    return $result;
+  }
+
+  // takes a string and replaces all placeholders with their corresponding values
+  function replace_placeholders($path, $placeholders) {
+    $phbefore  = "{%";
+    $phafter   = "}";
+
+    $result = false;
+
+    // replace placeholders
+    if (is_string($path) && is_array($placeholders)) {
+      $result = $path;
+
+      foreach ($placeholders as $key => $value) {
+        $result = str_ireplace($phbefore.$key.$phafter, $value, $result);
+      }
     }
 
     return $result;
